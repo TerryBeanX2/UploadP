@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="spark-md5.js"></script>
+    <script src="uploadP-1.n.js"></script>
+</head>
+<body>
+    <input id="aaa" type="file" multiple>
+    <input id="bbb" type="button" value="up">
+</body>
+<script>
+    //所有参数，只有inputTag和url是必须的。
+    var up = new UploadP({
+        inputTag: '#aaa', //Input标签--必须
+        url: 'http://172.16.218.67:3000/file/uploading', //上传链接--必须
+        maxSize: 1024 * 1024 * 10000, //限制文件大小，10G
+        useConfirmExt: false, // 是否限制格式为
+        confirmExtArr: ['mp4', 'mpg', 'ts', 'avi', 'mkv', 'mov', 'vob', 'm2t', 'wmv', 'flv'], //限制格式为的数组
+        useExceptExt: false,// 是否排除格式
+        exceptExtArr: ['mp4', 'mpg', 'ts', 'mkv', 'rmvb', 'avi', 'mpeg4', 'rm', 'm2t', 'wmv', 'mov', 'vob', "flv", "asf", "3gp"],//排除格式的数组
+        autoUpload: true, //选择文件后是否自动上传，如果中途需要加入自定义参数后上传，则必须设为false
+        param: {}, //如果队列都是统一的自定义参数，实例化时在此传入
+        needAddParam: false, //是否需要在上传队列中每个文件都另加自定义参数(选择文件后追加表单参数)
+        addParam_JoinQueue: '', //加入自定义参数，并将当前文件加入队列的按钮
+        pauseBtn: '', //暂停队列按钮,需要开启断点续传(此按钮会在暂停前调用beforeStop函数)--多个实例共用，不会重复绑定
+        startQueueBtn: '',//开始队列按钮(此按钮会在开始队列钱调用beforeUpload函数)--多个实例共用，不会重复绑定
+        useChunk: true,//是否分块,
+        dataFilter: null, //对ajax回掉函数中的data进行判定成功操作，决定是否正常执行上传，格式{条件:条件值}
+        theFile: 'file',//自定义传给后台当前文件对象的key值
+        totalSizeName: 'totalSize',//自定义传给后台当前文件总大小key值
+        fileNameName: 'name',//自定义传给后台当前文件名Kdy值
+        chunksName: 'chunks',//若分块，自定义传递给后台的总块数key值
+        currentChunkName: 'chunk',//若分块，自定义传递给后台的当前块key值
+        chunkSize: 1024 * 1024 * 50, //块大小,
+        useCurrentSize: false, //是否断点续传(此功能需同时打开MD5功能、原理是用MD5值去请求到断点处的大小，从断点处的size截取到文件末尾传给后台)
+        useMD5: false, //是否在上传参数中追加MD5：需要先引入spark-md5.js，为了速度，大于8M的文件，本MD5计算采用截取文件前后4m拼接后的值
+        MD5KeyName: 'mdId', //使用MD5的话，自定义传给后台参数的key
+        numOneTime: 1, //队列可同时上传个数(只在第一个实例化中生效)
+    })
+</script>
+</html>
