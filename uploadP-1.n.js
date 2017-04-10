@@ -48,7 +48,7 @@
                 //发起上传请求后得到data的自定义回调函数
                 //do sth what you want to data
             },
-            getFilesList:function(arr){
+            getFilesList: function (arr) {
                 //若需要取出当前一次选取文件的files对象进行操作(如将文件名作为列表展示给用户,提供删除功能等)，请重写此函数
                 //do sth what you want to files arr
             },
@@ -65,12 +65,13 @@
                 //参数arr为此次想要一并加入队列的未做传参处理的文件arr
                 //若需要自定义传参，请设置needAddParam为true，并重写此函数，不允许异步
                 //此函数在点击addParam_JoinQueue时触发，改变队列DOM请在这里操作
+                //param为空，则不触发上传，所以处理你自定义的过滤之类的事情写在这里，不满足就在param之前return false;
                 var param = {};
                 //fill the param;
                 return param; //必须
             },
             progressFn: function (upLoadPFileId, per) {
-                //如果你想把文件上传的进度展示给用户，请使用此函数，单位%
+                //如果你想把文件上传的进度展示给用户，请使用此函数
                 //index is the index in whole list witch the progress you want
                 //per is the live num of file progress
             },
@@ -204,7 +205,7 @@
                 // console.log(window.startedTime);
                 // console.log('listLength='+window.uploadPList.length)
                 if (!window.uploadPList.length || window.uploading && window.nowUploadingNum >= window.numOneTime) return;
-                window.nowUploadingNum++;
+                window.uploading = true;
                 self.beforeUpload();
                 self.startUpload();
             });
@@ -251,11 +252,13 @@
                     }
                 });
                 self.nowSelectedArr = self.nowSelectedArr.concat(arrC);
+                console.log(self.nowSelectedArr)
                 self.getFilesList(arrC);
                 if (!self.needAddParam) {
                     window.uploadPList = window.uploadPList.concat(arrC);
                     self.Event.emit('startUpload');
                 }
+                //这行代码会重置表格，确保表格内没有你不希望被重置的控件
                 if (this.form) this.form.reset();
             });
         },
@@ -268,6 +271,7 @@
             }
         },
         addInParam: function (param) {
+            if (!param) return;
             this.nowSelectedArr.forEach(function (item, index, list) {
                 list[index].param = param;
             });
@@ -285,11 +289,10 @@
                 self.queueComplete();
                 window.uploadPList = [];
                 window.nowUploadingNum = 0;
-                window.uploading = false;
                 return;
             }
             window.uploadPList.forEach(function (item, index, list) {
-                if (item.complete) return;
+                if (item.complete || item.paused) return;
                 if (!item.xhr) {
                     item.xhr = new XMLHttpRequest();
                     item.xhr.upload.onprogress = function (evt) {
@@ -328,8 +331,7 @@
                                     if (typeof self.failFn == 'function') self.failFn(self.xhr.responseText);
                                 }
                             } else {
-                                console.error('disconnected!');
-                                self.Event.emit('pauseUpload');
+                                console.log('disconnected!');
                             }
                         }
                     };
@@ -342,9 +344,11 @@
                             item.xhr.open("POST", self.url);
                             item.xhr.send(item.form);
                             item.uploading = true;
+                            item.paused = false;
                         });
                         item.canEmit = true;
                     }
+                    if (window.nowUploadingNum >= window.numOneTime)return;
                     if (self.useMD5 && !item.param[self.MD5KeyName]) {
                         self.MD5(item, function (md5) {
                             item.param[self.MD5KeyName] = md5;
@@ -358,21 +362,37 @@
         },
         pauseUpload: function (arr) {
             var self = this;
+            console.log(arr);
+            console.log(window.uploadPList);
             arr.forEach(function (item, index) {
+                console.log(item)
                 window.uploadPList.forEach(function (_item, _index, list) {
-                    if (item == _item.upLoadPFileId && _item.xhr) {
-                        item.xhr.abort();
-                        self.progressFn(_index, '||');
+                    if ((item == _item.upLoadPFileId) && _item.xhr) {
+                        if (_item.uploading) {
+                            _item.paused = true;
+                            _item.xhr.abort();
+                            _item.uploading = false;
+                            self.progressFn(_index, '暂停');
+                            window.nowUploadingNum--;
+                            self.Event.emit('startUpload');
+                        } else {
+                            if (window.nowUploadingNum >= window.numOneTime) return;
+                            _item.paused = false;
+                            self.transformParamToFormData(_item);
+                        }
                     }
                 })
-            })
+            });
         },
         pauseAll: function () {
             var self = this;
             window.uploadPList.forEach(function (item, index) {
                 if (item.uploading) {
+                    item.paused = true;
                     item.xhr.abort();
-                    self.progressFn(index, '||');
+                    item.uploading = false;
+                    self.progressFn(_index, '暂停');
+                    window.nowUploadingNum--;
                 }
             })
         },
@@ -451,6 +471,7 @@
                     item.currentChunk == item.chunks - 1 ? form.append(self.theFile, item.slice(item.currentChunk * self.chunkSize, item.size))
                         : form.append(self.theFile, item.slice(item.currentChunk * self.chunkSize, (item.currentChunk + 1) * self.chunkSize));
                 }
+                window.nowUploadingNum++;
                 self.Event.emit.call(item, 'paramFilled', form, currentSize);
             }
         },
