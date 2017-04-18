@@ -204,7 +204,7 @@
                 // window.startedTime++;
                 // console.log(window.startedTime);
                 // console.log('listLength='+window.uploadPList.length)
-                if (!window.uploadPList.length || window.uploading && window.nowUploadingNum >= window.numOneTime) return;
+                if (!window.uploadPList.length || window.nowUploadingNum >= window.numOneTime) return;
                 window.uploading = true;
                 self.beforeUpload();
                 self.startUpload();
@@ -218,6 +218,7 @@
                 console.log('trigger one complete');
                 self.oneComplete(upLoadPFIleId);
                 window.nowUploadingNum--;
+                if (window.nowUploadingNum == 0)window.uploading = false;
             });
             if (!self.inputTag) return alert('please bind your inputTag') & console.log('please bind your inputTag');
             self.addEvent(self.$(self.inputTag), 'change', function () {
@@ -226,18 +227,20 @@
                 var arrB = window.uploadPList.slice(0);
                 var arrC = [];
                 Array.prototype.forEach.call(arr, function (item, index, list) {
+                    var repeated = false;
                     if (arrA.some(function (_item, index) {
                             return (_item.name == item.name)
                         }) || arrB.some(function (__item, index) {
                             return (__item.name == item.name)
                         })) {
-                        console.log('filter auto ignored');
+                        repeated = true;
                     }
-                    if (self.compareMaxSize(item.size) && (self.useConfirmExt ? self.confirmExt(item.name) : true) && (self.useExceptExt ? self.exceptExt(item.name) : true)) {
+                    if (self.compareMaxSize(item.size) && (self.useConfirmExt ? self.confirmExt(item.name) : true) && (self.useExceptExt ? self.exceptExt(item.name) : true) && !repeated) {
                         item.upLoadPFileId = window.upLoadPFileId++;
                         item.complete = false;
                         item.uploading = false;
                         item.canEmit = false;
+                        item.haveGotCurrentSize = false;
                         item.currentChunk = 0;
                         item.chunks = 1;
                         item.param = {};
@@ -272,8 +275,9 @@
         },
         addInParam: function (param) {
             if (!param) return;
+            var self = this;
             this.nowSelectedArr.forEach(function (item, index, list) {
-                list[index].param = param;
+                self.extend(list[index].param, param)
             });
             window.uploadPList = window.uploadPList.concat(this.nowSelectedArr);
             this.nowSelectedArr = [];
@@ -302,9 +306,9 @@
                         var perA = 0;
                         if (self.useChunk) {
                             if (item.currentSize) {
-                                perA = ((item.currentSize + item.currentChunk * self.chunkSize + loaded) * 100 / item.size).toFixed(1);
+                                perA = (((item.currentSize) + (item.currentChunk) * (self.chunkSize) + loaded) * 100 / item.size).toFixed(1);
                             } else {
-                                perA = ((item.currentChunk * self.chunkSize + loaded) * 100 / item.size).toFixed(1);
+                                perA = (((item.currentChunk) * (self.chunkSize) + loaded) * 100 / item.size).toFixed(1);
                             }
                         } else {
                             perA = per.toFixed(1);
@@ -324,7 +328,7 @@
                                         self.Event.emit('startUpload');
                                         return
                                     }
-                                    if (item.currentChunk > item.chunks) return console.error('bug , chunks overflow');
+                                    if (item.currentChunk == item.chunks) return console.error('bug , chunks overflow');
                                     item.currentChunk++;
                                     self.transformParamToFormData(item);
                                 } else {
@@ -349,7 +353,8 @@
                         item.canEmit = true;
                     }
                     if (window.nowUploadingNum >= window.numOneTime)return;
-                    if (self.useMD5 && !item.param[self.MD5KeyName]) {
+                    window.nowUploadingNum++;
+                    if (self.useMD5 && !item.param[self.MD5KeyName] && !item.param[self.MD5KeyName]) {
                         self.MD5(item, function (md5) {
                             item.param[self.MD5KeyName] = md5;
                             self.transformParamToFormData(item);
@@ -362,22 +367,15 @@
         },
         pauseUpload: function (arr) {
             var self = this;
-            console.log(arr);
-            console.log(window.uploadPList);
             arr.forEach(function (item, index) {
-                console.log(item)
                 window.uploadPList.forEach(function (_item, _index, list) {
                     if ((item == _item.upLoadPFileId) && _item.xhr) {
                         if (_item.uploading) {
-                            _item.paused = true;
-                            _item.xhr.abort();
-                            _item.uploading = false;
-                            self.progressFn(_index, '暂停');
-                            window.nowUploadingNum--;
+                            self.pauseOneItem(_item);
                             self.Event.emit('startUpload');
                         } else {
                             if (window.nowUploadingNum >= window.numOneTime) return;
-                            _item.paused = false;
+                            self.startOneItem(_item);
                             self.transformParamToFormData(_item);
                         }
                     }
@@ -388,13 +386,22 @@
             var self = this;
             window.uploadPList.forEach(function (item, index) {
                 if (item.uploading) {
-                    item.paused = true;
-                    item.xhr.abort();
-                    item.uploading = false;
-                    self.progressFn(_index, '暂停');
-                    window.nowUploadingNum--;
+                    self.pauseOneFile(item)
                 }
             })
+        },
+        pauseOneItem:function (item) {
+            item.paused = true;
+            item.xhr.abort();
+            item.uploading = false;
+            item.haveGotCurrentSize = false;
+            self.progressFn(_index, '暂停');
+            window.nowUploadingNum--;
+        },
+        startOneItem:function (item) {
+            item.paused = false;
+            item.uploading = true;
+            window.nowUploadingNum++;
         },
         compareMaxSize: function (size) {
             if (size < this.maxSize) {
@@ -428,7 +435,7 @@
         MD5: function (file, fn) {
             fn();
         },
-        getCurrentSize: function (md5, fn) {
+        getCurrentSize: function (item, fn) {
             var currentSize = 0;
             //currentSize = get your currentSize
             fn(currentSize);
@@ -449,19 +456,21 @@
             form.append(this.totalSizeName, item.size);
             form.append('name', item.name);
             form.append(this.currentChunkName, item.currentChunk);
-            form.append(this.chunksName, item.chunks);
-
-            if (this.useCurrentSize && this.useMD5 && item.currentChunk == 0) {
-                this.getCurrentSize(item.param[this.MD5KeyName], doNext);
+            if (this.useCurrentSize && this.useMD5 && !item.haveGotCurrentSize) {
+                this.getCurrentSize(item, function (currentSize) {
+                    doNext(currentSize);
+                    item.haveGotCurrentSize = true;
+                });
             } else {
                 doNext();
             }
             function doNext(currentSize) {
-                if (self.useCurrentSize) {
+                if (currentSize || currentSize == 0) {
+                    currentSize = Number(currentSize);
                     item.currentSize = currentSize;
                     item.chunks = Math.ceil((item.size - currentSize) / self.chunkSize);
-                    form.append(self.chunksName, item.chunks);
                 }
+                form.append(self.chunksName, item.chunks);
                 if (!self.useChunk) {
                     form.append(self.theFile, item);
                 } else if (self.useCurrentSize) {
@@ -471,8 +480,7 @@
                     item.currentChunk == item.chunks - 1 ? form.append(self.theFile, item.slice(item.currentChunk * self.chunkSize, item.size))
                         : form.append(self.theFile, item.slice(item.currentChunk * self.chunkSize, (item.currentChunk + 1) * self.chunkSize));
                 }
-                window.nowUploadingNum++;
-                self.Event.emit.call(item, 'paramFilled', form, currentSize);
+                self.Event.emit.call(item, 'paramFilled', form, item.currentSize);
             }
         },
         deleteNowSelectItem: function (upLoadPFileId) {
