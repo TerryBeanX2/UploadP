@@ -5,7 +5,6 @@
 后台通过链表写入文件，就可以避免分块了，<br/>
 所以说，以后不打算在这个插件上投入太多精力，<br/>
 关于大文件最好的上传模式，我找时间找技术总监请教一下。<br/>
-我今后的技术研发目标就放在两块上：前端框架(React等)、Node.js，最好的愿景就是技术栈越来越偏向后端。<br/>
 
 #### 4.21增加一张线上项目效果图
 ![img](https://github.com/TerryBeanX2/UploadP/raw/master/egImg/example.jpg)
